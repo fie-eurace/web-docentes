@@ -1,0 +1,41 @@
+// This is your Prisma schema file
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Faculty {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Configuration fields
+  spreadsheetId String?
+  apiKey       String?
+  sheetTitle   String?
+  sheetId      String?
+  logo         String?
+  primaryColor String?
+
+  // Relationships
+  fieldMappings FieldMapping[]
+}
+
+model FieldMapping {
+  id        String   @id @default(uuid())
+  facultyId String
+  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  fieldKey  String
+  label     String
+  columnIndex Int?
+  displayIn  String  // Stored as JSON array of display locations
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([facultyId, fieldKey])
+}
