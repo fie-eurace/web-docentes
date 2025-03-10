@@ -48,67 +48,71 @@ const ProfessorListConfig = ({
   const [availableFaculties, setAvailableFaculties] = useState([]);
 
   useEffect(() => {
-    // Load available faculties from localStorage
-    const loadFaculties = () => {
-      const storedFaculties = Object.keys(localStorage)
-        .filter(key => key.startsWith('faculty_'))
-        .map(key => key.replace('faculty_', ''));
-      setAvailableFaculties(storedFaculties);
-
-      // If no faculty is selected but we have faculties available, select the first one
-      if (!localSelectedFaculty && storedFaculties.length > 0) {
-        setLocalSelectedFaculty(storedFaculties[0]);
+    const fetchFaculties = async () => {
+      try {
+        const response = await fetch("http://localhost:4000/faculties");
+        if (!response.ok) throw new Error("No se pudieron cargar las facultades");
+  
+        const faculties = await response.json();
+        setAvailableFaculties(faculties.map(f => f.name));
+  
+        if (!localSelectedFaculty && faculties.length > 0) {
+          setLocalSelectedFaculty(faculties[0].name);
+        }
+      } catch (error) {
+        console.error("Error cargando facultades:", error);
       }
     };
-    
-    // Add event listener for storage changes
-    window.addEventListener('storage', loadFaculties);
-    loadFaculties();
-    
-    return () => {
-      window.removeEventListener('storage', loadFaculties);
-    };
-  }, [localSelectedFaculty]);
+  
+    fetchFaculties();
+  }, []);
 
   // Load faculty configuration when localSelectedFaculty changes
   useEffect(() => {
     const loadFacultyData = async () => {
       if (!localSelectedFaculty) return;
-
+  
       try {
         setLoading(true);
-        const config = loadFacultyConfig(localSelectedFaculty);
-        
-        // Load the field mappings from the faculty config
-        if (config.fieldMappings) {
+        const response = await fetch(`http://localhost:4000/faculties/${localSelectedFaculty}`);
+        if (!response.ok) throw new Error("No se pudo obtener la configuración de la facultad");
+  
+        const config = await response.json();
+        console.log("Configuración de la facultad cargada:", config);
+  
+        if (config.spreadsheetId && config.apiKey && config.selectedSheet) {
+          const headers = await fetchSheetHeaders(config.spreadsheetId, config.apiKey, config.selectedSheet.title);
+          console.log("Encabezados obtenidos:", headers);
+          setSheetHeaders(headers);
+        }
+  
+        if (!config.fieldMappings || Object.keys(config.fieldMappings).length === 0) {
+          console.warn("No hay mapeo de columnas guardado, asignando valores por defecto.");
+          let defaultFieldMappings = {};
+          sheetHeaders.forEach((header, index) => {
+            defaultFieldMappings[header.name] = {
+              label: header.name,
+              columnIndex: index
+            };
+          });
+  
+          console.log("Asignando mapeo por defecto:", defaultFieldMappings);
+          setFieldMappings(defaultFieldMappings);
+        } else {
+          console.log("Mapeo de columnas cargado:", config.fieldMappings);
           setFieldMappings(config.fieldMappings);
         }
-
-        // Load the selected sheet from the config
-        if (config.selectedSheet) {
-          setSelectedSheet(config.selectedSheet);
-        }
-        
-        if (config.spreadsheetId && config.apiKey && config.selectedSheet) {
-          // Fetch headers for the selected sheet
-          const headers = await fetchSheetHeaders(config.spreadsheetId, config.apiKey, config.selectedSheet.title);
-          setSheetHeaders(headers);
-          
-          // Fetch preview data
-          await fetchSheetPreviewData(config.spreadsheetId, config.apiKey, config.selectedSheet.title);
-        }
+  
+        setSelectedSheet(config.selectedSheet || null);
       } catch (error) {
-        console.error('Error loading faculty data:', error);
-        setDialogMessage({
-          type: 'error',
-          text: 'Error al cargar los datos de la facultad: ' + error.message
-        });
+        console.error("Error cargando configuración:", error);
+        setDialogMessage({ type: "error", text: "Error al obtener la configuración de la facultad: " + error.message });
         setOpenDialog(true);
       } finally {
         setLoading(false);
       }
     };
-
+  
     loadFacultyData();
   }, [localSelectedFaculty]);
 

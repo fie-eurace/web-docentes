@@ -13,6 +13,7 @@ model Faculty {
   name      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   // Configuration fields
   spreadsheetId String?
@@ -29,7 +30,7 @@ model Faculty {
 model FieldMapping {
   id        String   @id @default(uuid())
   facultyId String
-  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  faculty   Faculty  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
   fieldKey  String
   label     String
   columnIndex Int?
