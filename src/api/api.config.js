@@ -27,15 +27,15 @@ export const saveFacultyToBackend = async ({ name, spreadsheetId, apiKey }) => {
 
   // Obtener la configuración de una facultad
 export const getFacultyConfig = async (facultyName) => {
-  try {
-      const response = await fetch(`${API_URL}/${facultyName}`);
-      if (!response.ok) throw new Error("No se encontró la facultad");
+    try {
+        const response = await fetch(`${API_URL}/${facultyName}`);
+        if (!response.ok) throw new Error("No se encontró la facultad");
 
-      return await response.json();
-  } catch (error) {
-      console.error("Error obteniendo configuración de la facultad:", error);
-      throw error;
-  }
+        return await response.json();
+    } catch (error) {
+        console.error("Error obteniendo configuración de la facultad:", error);
+        throw error;
+    }
 };
 
 // Guardar los mapeos de columnas en FieldMapping

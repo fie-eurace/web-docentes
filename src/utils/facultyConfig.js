@@ -61,20 +61,44 @@ export const getAvailableFaculties = () => {
 };
 
 // Load faculty configuration from localStorage
-export const loadFacultyConfig = (facultyId = 'FIE') => {
+export const loadFacultyConfig = async (facultyId) => {
   try {
-    // Normalize faculty ID to uppercase for consistent storage and retrieval
     const normalizedFacultyId = facultyId.toUpperCase();
+    
+    // 🔹 Intentar obtener la configuración desde la API
+    const response = await fetch(`http://localhost:4000/faculties/${normalizedFacultyId}`);
+    if (response.ok) {
+      const configFromApi = await response.json();
+      console.log("✅ Configuración obtenida desde la API:", configFromApi);
+
+      // Validar que los datos esenciales no sean vacíos
+      if (!configFromApi.spreadsheetId || !configFromApi.apiKey || !configFromApi.selectedSheet?.title) {
+        throw new Error(`Configuración incompleta en la API para ${normalizedFacultyId}`);
+      }
+
+      // Guardar la configuración en localStorage
+      localStorage.setItem(`faculty_${normalizedFacultyId}`, JSON.stringify(configFromApi));
+      
+      return configFromApi;
+    } else {
+      console.warn("⚠ No se pudo obtener la configuración desde la API. Usando localStorage.");
+    }
+    
+    // 🔹 Intentar cargar la configuración desde localStorage
     const storedConfig = localStorage.getItem(`faculty_${normalizedFacultyId}`);
     if (storedConfig) {
       return JSON.parse(storedConfig);
     }
-    return DEFAULT_FACULTY_CONFIG;
+
+    console.warn(`⚠ No se encontró configuración en localStorage para ${normalizedFacultyId}.`);
+    return null;
+    
   } catch (error) {
-    console.error('Error loading faculty configuration:', error);
-    return DEFAULT_FACULTY_CONFIG;
+    console.error("❌ Error al cargar la configuración de la facultad:", error);
+    return null;
   }
 };
+
 
 // Save faculty configuration to localStorage
 export const saveFacultyConfig = (facultyId, config) => {

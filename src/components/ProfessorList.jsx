@@ -1,97 +1,86 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   CircularProgress,
   Alert,
-  Paper,
-  Typography,
-  Avatar,
-  Tabs,
-  Tab,
   Container,
   Grid,
-  Link,
-  IconButton,
+  TextField,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
   Pagination
-} from '@mui/material'
-import { Email, PictureAsPdf, Science } from '@mui/icons-material'
-import { fetchProfessorsData } from '../utils/googleSheetsConfig'
-import { TextField, MenuItem, Select, FormControl, InputLabel } from '@mui/material'
-import ProfessorCard from './ProfessorCard'
-import { useParams } from 'react-router-dom'
-
-const TabPanel = (props) => {
-  const { children, value, index, ...other } = props
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  )
-}
+} from '@mui/material';
+import ProfessorCard from './ProfessorCard';
+import { useParams } from 'react-router-dom';
+import { fetchProfessorsData } from '../utils/googleSheetsConfig';
+import { getFacultyConfig } from '../api/api.config';
 
 const ProfessorList = () => {
-  const [professors, setProfessors] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [tabValue, setTabValue] = useState(0)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCareer, setSelectedCareer] = useState('Todos')
-  const [page, setPage] = useState(1)
-  const professorsPerPage = 10
-  const { faculty, professorName, career } = useParams()
+  const { faculty } = useParams(); // Obtener la facultad desde la URL
+  const [professors, setProfessors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCareer, setSelectedCareer] = useState('Todos');
+  const [page, setPage] = useState(1);
+  const professorsPerPage = 10;
+  const [facultyConfig, setFacultyConfig] = useState(null);
 
+  // Cargar la configuración de la facultad seleccionada
   useEffect(() => {
-    const loadProfessors = async () => {
+    const loadFacultyConfig = async () => {
       try {
-        setLoading(true)
-        setError(null)
-        const data = await fetchProfessorsData(faculty || 'FIE')
-        setProfessors(data)
+        setLoading(true);
+        setError(null);
+    
+        console.log("📌 Buscando configuración para la facultad:", faculty);
+        const config = await getFacultyConfig(faculty);
+        console.log("✅ Configuración obtenida en getFacultyConfig:", config);
+    
+        if (!config || !config.spreadsheetId || !config.apiKey || !config.selectedSheet?.title) {
+          throw new Error(`Configuración incompleta para la facultad: ${faculty}.`);
+        }
+    
+        setFacultyConfig(config);
+    
+        // Cargar datos de los profesores con el nombre de la facultad, no el ID de la hoja
+        const data = await fetchProfessorsData(faculty);
+        setProfessors(data);
       } catch (error) {
-        console.error('Error loading professors:', error)
-        setError('Error al cargar los datos de profesores. Por favor, intente nuevamente más tarde.')
+        console.error("❌ Error al cargar la facultad:", error);
+        setError(error.message);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
+    };
+    
+
+    if (faculty) {
+        loadFacultyConfig();
     }
-
-    loadProfessors()
-  }, [faculty])
-
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue)
-  }
+  }, [faculty]);
 
   const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value)
-  }
+    setSearchQuery(event.target.value);
+  };
 
   const handleCareerChange = (event) => {
-    setSelectedCareer(event.target.value)
-    setPage(1) // Reset to first page when changing career
-  }
+    setSelectedCareer(event.target.value);
+    setPage(1);
+  };
 
   const handlePageChange = (event, value) => {
-    setPage(value)
-  }
+    setPage(value);
+  };
 
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
         <CircularProgress />
       </Box>
-    )
+    );
   }
 
   if (error) {
@@ -99,48 +88,18 @@ const ProfessorList = () => {
       <Box sx={{ mt: 2 }}>
         <Alert severity="error">{error}</Alert>
       </Box>
-    )
+    );
   }
 
-  const careers = ['Todos', ...new Set(professors.map(p => p.carrera))]
+  const careers = ['Todos', ...new Set(professors.map(p => p.carrera))];
 
   const filteredProfessors = professors.filter(professor => {
-    const matchesSearch = `${professor.nombres} ${professor.apellidos} ${professor.titulo_phd || ''}`
+    const matchesSearch = `${professor.nombres} ${professor.apellidos}`
       .toLowerCase()
-      .includes(searchQuery.toLowerCase())
-    const matchesCareer = selectedCareer === 'Todos' || professor.carrera === selectedCareer
-    return matchesSearch && matchesCareer
-  })
-
-  const selectedProfessor = professorName
-    ? professors.find(p => {
-        const fullName = `${p.nombres}-${p.apellidos}`
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9\s-]/g, '')
-          .replace(/\s+/g, '-')
-          .replace(/-+/g, '-')
-          .trim()
-        const careerPath = p.carrera
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9\s-]/g, '')
-          .replace(/\s+/g, '-')
-          .replace(/-+/g, '-')
-          .trim()
-        return fullName === professorName && careerPath === career
-      })
-    : null
-
-  if (selectedProfessor) {
-    return (
-      <Container maxWidth="lg">
-        <ProfessorCard professor={selectedProfessor} detailed />
-      </Container>
-    )
-  }
+      .includes(searchQuery.toLowerCase());
+    const matchesCareer = selectedCareer === 'Todos' || professor.carrera === selectedCareer;
+    return matchesSearch && matchesCareer;
+  });
 
   return (
     <Container maxWidth="lg">
@@ -200,7 +159,7 @@ const ProfessorList = () => {
         </Box>
       )}
     </Container>
-  )
-}
+  );
+};
 
-export default ProfessorList
+export default ProfessorList;
