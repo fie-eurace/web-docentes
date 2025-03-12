@@ -28,7 +28,9 @@ import {
 } from '@mui/material';
 import { Refresh, Save, Email } from '@mui/icons-material';
 import { fetchSheetHeaders, fetchAvailableSheets } from '../../utils/googleSheetsConfig';
-import { loadFacultyConfig, saveFacultyConfig } from '../../utils/facultyConfig';
+import { loadFacultyConfig, saveFacultyConfig } from '../../services/facultyServices';
+import { getFacultyConfig, saveFieldMappings } from '../../api/api.config';
+
 
 const ProfessorListConfig = ({
   selectedFaculty,
@@ -46,6 +48,7 @@ const ProfessorListConfig = ({
   const [dialogMessage, setDialogMessage] = useState({ type: '', text: '' });
   const [localSelectedFaculty, setLocalSelectedFaculty] = useState('');
   const [availableFaculties, setAvailableFaculties] = useState([]);
+  const [tablePreview, setTablePreview] = useState([]);
 
   useEffect(() => {
     const fetchFaculties = async () => {
@@ -74,39 +77,45 @@ const ProfessorListConfig = ({
   
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:4000/faculties/${localSelectedFaculty}`);
-        if (!response.ok) throw new Error("No se pudo obtener la configuración de la facultad");
+        const facultyData = await getFacultyConfig(localSelectedFaculty);
+        setSelectedSheet(facultyData.selectedSheet || null);
   
-        const config = await response.json();
-        console.log("Configuración de la facultad cargada:", config);
-  
-        if (config.spreadsheetId && config.apiKey && config.selectedSheet) {
-          const headers = await fetchSheetHeaders(config.spreadsheetId, config.apiKey, config.selectedSheet.title);
-          console.log("Encabezados obtenidos:", headers);
+        if (facultyData.spreadsheetId && facultyData.apiKey && facultyData.selectedSheet) {
+          // Cargar encabezados de la hoja
+          const headers = await fetchSheetHeaders(
+            facultyData.spreadsheetId,
+            facultyData.apiKey,
+            facultyData.selectedSheet.title
+          );
           setSheetHeaders(headers);
+  
+          // Cargar datos de vista previa
+          await fetchSheetPreviewData(
+            facultyData.spreadsheetId,
+            facultyData.apiKey,
+            facultyData.selectedSheet.title
+          );
+  
+          // Si hay mapeo guardado, aplicarlo
+          if (facultyData.fieldMappings.length > 0) {
+            const mappings = {};
+            facultyData.fieldMappings.forEach(mapping => {
+              mappings[mapping.fieldKey] = {
+                label: mapping.label,
+                columnIndex: mapping.columnIndex,
+                displayIn: JSON.parse(mapping.displayIn || "[]")
+              };
+            });
+  
+            setFieldMappings(mappings);
+          }
         }
-  
-        if (!config.fieldMappings || Object.keys(config.fieldMappings).length === 0) {
-          console.warn("No hay mapeo de columnas guardado, asignando valores por defecto.");
-          let defaultFieldMappings = {};
-          sheetHeaders.forEach((header, index) => {
-            defaultFieldMappings[header.name] = {
-              label: header.name,
-              columnIndex: index
-            };
-          });
-  
-          console.log("Asignando mapeo por defecto:", defaultFieldMappings);
-          setFieldMappings(defaultFieldMappings);
-        } else {
-          console.log("Mapeo de columnas cargado:", config.fieldMappings);
-          setFieldMappings(config.fieldMappings);
-        }
-  
-        setSelectedSheet(config.selectedSheet || null);
       } catch (error) {
         console.error("Error cargando configuración:", error);
-        setDialogMessage({ type: "error", text: "Error al obtener la configuración de la facultad: " + error.message });
+        setDialogMessage({
+          type: "error",
+          text: "Error al obtener la configuración de la facultad: " + error.message
+        });
         setOpenDialog(true);
       } finally {
         setLoading(false);
@@ -115,7 +124,7 @@ const ProfessorListConfig = ({
   
     loadFacultyData();
   }, [localSelectedFaculty]);
-
+  
   useEffect(() => {
     if (localSelectedFaculty) {
       const config = loadFacultyConfig(localSelectedFaculty);
@@ -158,104 +167,110 @@ const ProfessorListConfig = ({
     }
   }, [localSelectedFaculty]);
 
-  // Sheet selection functionality has been moved to FacultyManagement
-
-
   // Function to fetch preview data (first 10 rows) from the selected sheet
   const fetchSheetPreviewData = async (spreadsheetId, apiKey, sheetName) => {
     try {
       setLoading(true);
-      // Use the sheet name in the request if provided
-      const range = sheetName ? `${sheetName}!A1:Z11` : 'A1:Z11'; // Get header + 10 rows
-      const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${apiKey}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Origin': window.location.origin
-        },
-        mode: 'cors'
-      });
-      
+      const range = sheetName ? `${sheetName}!A1:Z11` : 'A1:Z11'; 
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?key=${apiKey}`
+      );
+  
       if (!response.ok) {
-        throw new Error(`Error de servidor (${response.status}). Por favor, verifique la configuración de la API de Google Sheets.`);
+        throw new Error(`Error de servidor (${response.status}). Verifica la configuración de la API.`);
       }
-      
+  
       const data = await response.json();
-      
+  
       if (!data.values || !Array.isArray(data.values) || data.values.length <= 1) {
         throw new Error('No se encontraron datos en la hoja de cálculo');
       }
-      
-      // First row is headers, rest are data rows
+  
+      // La primera fila son los encabezados, las siguientes son los datos
       const headers = data.values[0];
       const rows = data.values.slice(1);
-      
+  
+      console.log("✅ Datos cargados correctamente:", rows);
+  
+      // Guardar los datos sin alterarlos
       setTableData(rows);
+  
+      // Aplicar mapeo actual sobre los nuevos datos
+      updatePreviewData(fieldMappings);
     } catch (error) {
-      console.error('Error fetching preview data:', error);
+      console.error("Error al obtener vista previa:", error);
       setDialogMessage({
         type: 'error',
-        text: 'Error al obtener los datos de vista previa: ' + error.message
+        text: 'Error al obtener los datos de la vista previa: ' + error.message
       });
       setOpenDialog(true);
     } finally {
       setLoading(false);
     }
   };
+  
 
-  const handleColumnMappingChange = (field, columnIndex) => {
-    setFieldMappings(prev => ({
-      ...prev,
-      [field]: {
-        ...prev[field],
-        columnIndex
-      }
+  const updatePreviewData = (updatedFieldMappings) => {
+    if (!tableData || tableData.length === 0) {
+      console.warn("No hay datos en la tabla para actualizar la vista previa.");
+      return [];
+    }
+  
+    // Mapear datos en tiempo real según las columnas seleccionadas
+    return tableData.slice(0, 3).map(row => ({
+      nombres: row[updatedFieldMappings.nombres?.columnIndex] || 'N/A',
+      apellidos: row[updatedFieldMappings.apellidos?.columnIndex] || 'N/A',
+      carrera: row[updatedFieldMappings.carrera?.columnIndex] || 'N/A',
+      email: row[updatedFieldMappings.email?.columnIndex] || '',
+      url_imagen: row[updatedFieldMappings.url_imagen?.columnIndex] || '',
+      relacion_laboral: row[updatedFieldMappings.relacion_laboral?.columnIndex] || 'N/A'
     }));
   };
+  
+  
+  const handleColumnMappingChange = (field, columnIndex) => {
+    setFieldMappings(prev => {
+      const updatedMappings = {
+        ...prev,
+        [field]: {
+          ...prev[field],
+          columnIndex
+        }
+      };
+  
+      // Calcular nueva vista previa con los datos cargados
+      setTablePreview(updatePreviewData(updatedMappings));
+  
+      return updatedMappings;
+    });
+  };
+  
 
-  const handleSaveColumnMappings = () => {
+  const handleSaveColumnMappings = async () => {
     if (!localSelectedFaculty) {
       setDialogMessage({ type: 'error', text: 'Por favor, seleccione una facultad primero' });
       setOpenDialog(true);
       return;
     }
-    
+  
     setLoading(true);
     try {
-      const config = loadFacultyConfig(localSelectedFaculty);
-      
-      // Update field mappings with column indices
-      const updatedFieldMappings = {};
-      Object.entries(fieldMappings).forEach(([field, fieldConfig]) => {
-        if (config.fieldMappings[field]) {
-          updatedFieldMappings[field] = {
-            ...config.fieldMappings[field],
-            columnIndex: fieldConfig.columnIndex
-          };
-        }
-      });
-      
-      config.fieldMappings = updatedFieldMappings;
-      
-      // Make sure we save the selected sheet information
-      if (selectedSheet) {
-        config.selectedSheet = selectedSheet;
-      }
-      
-      if (saveFacultyConfig(localSelectedFaculty, config)) {
-        setDialogMessage({ 
-          type: 'success', 
-          text: 'Mapeo de columnas guardado exitosamente. Ahora puede ver la lista de profesores con la configuración actualizada.' 
-        });
-        setOpenDialog(true);
-      } else {
-        setDialogMessage({ type: 'error', text: 'Error al guardar el mapeo de columnas' });
-        setOpenDialog(true);
-      }
+      const facultyData = await getFacultyConfig(localSelectedFaculty);
+  
+      const fieldMappingsToSave = Object.entries(fieldMappings).map(([key, value]) => ({
+        fieldKey: key,
+        label: value.label || key,
+        columnIndex: value.columnIndex,
+        displayIn: JSON.stringify(value.displayIn || [])
+      }));
+  
+      await saveFieldMappings(facultyData.id, fieldMappingsToSave);
+  
+      setDialogMessage({ type: 'success', text: 'Mapeo de columnas guardado exitosamente' });
+      setOpenDialog(true);
     } catch (error) {
-      console.error('Error saving column mappings:', error);
-      setDialogMessage({ type: 'error', text: 'Ocurrió un error al guardar el mapeo de columnas: ' + error.message });
+      console.error('Error al guardar el mapeo:', error);
+      setDialogMessage({ type: 'error', text: 'Ocurrió un error al guardar el mapeo: ' + error.message });
       setOpenDialog(true);
     } finally {
       setLoading(false);

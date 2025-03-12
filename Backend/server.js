@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { getFaculties, createFaculty, deleteFaculty, getFacultyByName } from './utils/dbConfig.js';
+import { getFaculties, createFaculty, deleteFaculty, getFacultyByName, upsertFieldMappings } from './utils/dbConfig.js';
 
 const app = express();
 app.use(cors());
@@ -129,6 +129,23 @@ app.get('/faculties/:name', async (req, res) => {
   }
 });
 
+app.put('/faculties/:id/mappings', async (req, res) => {
+  try {
+    const { fieldMappings } = req.body;
+    const facultyId = req.params.id;
+
+    if (!fieldMappings || !Array.isArray(fieldMappings)) {
+      return res.status(400).json({ error: "Los mapeos de columnas son inválidos" });
+    }
+
+    const updatedMappings = await upsertFieldMappings(facultyId, fieldMappings);
+
+    res.json({ message: "Mapeo de columnas guardado correctamente", fieldMappings: updatedMappings });
+  } catch (error) {
+    console.error("Error guardando mapeo de columnas:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Iniciar el servidor
 const PORT = 4000;

@@ -1,5 +1,5 @@
 // src/services/facultyService.js
-export const loadFaculties = () => {
+  export const loadFaculties = () => {
     return Object.keys(localStorage)
       .filter(key => key.startsWith('faculty_'))
       .map(key => key.replace('faculty_', ''));
@@ -23,4 +23,5 @@ export const loadFaculties = () => {
   export const deleteFacultyConfig = (facultyId) => {
     localStorage.removeItem(`faculty_${facultyId}`);
   };
+
   

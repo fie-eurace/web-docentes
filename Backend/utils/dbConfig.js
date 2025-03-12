@@ -153,4 +153,47 @@ export const deleteFaculty = async (id) => {
   }
 };
 
+export const upsertFieldMappings = async (facultyId, fieldMappings) => {
+  try {
+    // Obtener los mapeos actuales de la facultad
+    const existingMappings = await prisma.fieldMapping.findMany({
+      where: { facultyId }
+    });
+
+    const mappingUpdates = fieldMappings.map(mapping => {
+      const existingMapping = existingMappings.find(m => m.fieldKey === mapping.fieldKey);
+
+      if (existingMapping) {
+        // Actualizar mapeo existente
+        return prisma.fieldMapping.update({
+          where: { id: existingMapping.id },
+          data: {
+            label: mapping.label,
+            columnIndex: mapping.columnIndex,
+            displayIn: JSON.stringify(mapping.displayIn || [])
+          }
+        });
+      } else {
+        // Crear nuevo mapeo
+        return prisma.fieldMapping.create({
+          data: {
+            facultyId,
+            fieldKey: mapping.fieldKey,
+            label: mapping.label,
+            columnIndex: mapping.columnIndex,
+            displayIn: JSON.stringify(mapping.displayIn || [])
+          }
+        });
+      }
+    });
+
+    // Ejecutar todas las operaciones de creación/actualización
+    await prisma.$transaction(mappingUpdates);
+    return await prisma.fieldMapping.findMany({ where: { facultyId } });
+  } catch (error) {
+    console.error("Error guardando mapeo de columnas:", error);
+    throw new Error("No se pudo guardar el mapeo de columnas");
+  }
+};
+
 export default prisma;
