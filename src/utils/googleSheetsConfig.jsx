@@ -131,12 +131,12 @@ export const fetchProfessorsData = async (facultyName) => {
       }
 
       return data.values.map(row => ({
-          nombres: row[1] || "N/A",
-          apellidos: row[2] || "N/A",
-          carrera: row[7] || "N/A",
-          email: row[3] || "",
-          url_imagen: row[8] || "",
-          relacion_laboral: row[6] || "N/A"
+        nombres: row[1] ? row[1].trim() : "Desconocido",
+        apellidos: row[2] ? row[2].trim() : "Desconocido",
+        carrera: row[7] || "No especificado",
+        email: row[3] || "",
+        url_imagen: row[8] || "",
+        relacion_laboral: row[6] || "No especificado"
       }));
 
   } catch (error) {
